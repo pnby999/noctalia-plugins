@@ -6,7 +6,7 @@
   "author": "MannuVilasara",
   "license": "MIT",
   "repository": "https://github.com/noctalia-dev/noctalia-plugins",
-  "description": "Manage Docker containers, volumes.",
+  "description": "Manage Docker containers, images, volumes & networks",
   "entryPoints": {
     "barWidget": "BarWidget.qml",
     "panel": "Panel.qml",
