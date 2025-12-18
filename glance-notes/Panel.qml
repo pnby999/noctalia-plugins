@@ -287,7 +287,7 @@ Item {
     // Save process
     Process {
         id: saveProcess
-        command: ["sh", "-c", "echo \"$NOTES_CONTENT\" > '" + root.notesPath + "'"]
+        command: ["sh", "-c", "printf '%s' \"$NOTES_CONTENT\" > '" + root.notesPath + "'"]
         environment: {
             "NOTES_CONTENT": notesArea.text
         }
