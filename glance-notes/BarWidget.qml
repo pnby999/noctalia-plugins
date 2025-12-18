@@ -15,16 +15,16 @@ Rectangle {
     property string section: ""
 
     property bool hovered: false
-    property bool hasNotes: false
+    property int noteCount: 0
 
     readonly property string barPosition: Settings.data.bar.position
     readonly property bool isVertical: barPosition === "left" || barPosition === "right"
-    readonly property string notesPath: (pluginApi?.pluginDir || (Settings.configDir + "/plugins/glance-notes")) + "/notes.txt"
+    readonly property string notesPath: (pluginApi?.pluginDir || (Settings.configDir + "/plugins/glance-notes")) + "/notes.json"
 
-    implicitWidth: isVertical ? Style.capsuleHeight : (hasNotes ? 50 : 40) * Style.uiScaleRatio
-    implicitHeight: isVertical ? (hasNotes ? 50 : 40) * Style.uiScaleRatio : Style.capsuleHeight
+    implicitWidth: isVertical ? Style.capsuleHeight : (noteCount > 0 ? 60 : 40) * Style.uiScaleRatio
+    implicitHeight: isVertical ? (noteCount > 0 ? 60 : 40) * Style.uiScaleRatio : Style.capsuleHeight
 
-    color: root.hovered ? Color.mHover : (hasNotes ? Color.mSurfaceVariant : "transparent")
+    color: root.hovered ? Color.mHover : (noteCount > 0 ? Color.mSurfaceVariant : "transparent")
     radius: Style.radiusM
 
     Behavior on color {
@@ -46,8 +46,8 @@ Rectangle {
         spacing: Style.marginXS
 
         NIcon {
-            icon: hasNotes ? "draft-symbolic" : "edit-symbolic"
-            color: root.hovered ? Color.mOnHover : (hasNotes ? Color.mPrimary : Color.mOnSurface)
+            icon: "note-multiple-symbolic"
+            color: root.hovered ? Color.mOnHover : (noteCount > 0 ? Color.mPrimary : Color.mOnSurface)
             
             Behavior on color {
                 ColorAnimation {
@@ -57,12 +57,19 @@ Rectangle {
             }
         }
 
-        Rectangle {
-            visible: hasNotes
-            Layout.preferredWidth: 4
-            Layout.preferredHeight: 4
-            radius: 2
-            color: Color.mPrimary
+        NText {
+            visible: noteCount > 0
+            text: noteCount.toString()
+            pointSize: Style.fontSizeS
+            font.weight: Font.Bold
+            color: root.hovered ? Color.mOnHover : Color.mPrimary
+            
+            Behavior on color {
+                ColorAnimation {
+                    duration: Style.animationNormal
+                    easing.type: Easing.InOutQuad
+                }
+            }
         }
     }
 
@@ -79,7 +86,9 @@ Rectangle {
 
         onEntered: {
             root.hovered = true;
-            var tooltip = hasNotes ? "Quick Notes (has content)" : "Quick Notes (empty)";
+            var tooltip = noteCount === 0 ? "Quick Notes (empty)" : 
+                         noteCount === 1 ? "1 note" :
+                         noteCount + " notes";
             TooltipService.show(root, tooltip, BarService.getTooltipDirection());
         }
 
@@ -89,25 +98,30 @@ Rectangle {
         }
     }
 
-    // Check if notes file has content
+    // Check note count
     Timer {
-        interval: 2000
+        interval: 3000
         running: true
         repeat: true
-        onTriggered: checkNotesExist.running = true
+        onTriggered: checkNoteCount.running = true
     }
 
     Process {
-        id: checkNotesExist
-        command: ["sh", "-c", "test -s '" + root.notesPath + "' && echo 'yes' || echo 'no'"]
+        id: checkNoteCount
+        command: ["sh", "-c", "cat '" + root.notesPath + "' 2>/dev/null || echo '[]'"]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.hasNotes = text.trim() === "yes";
+                try {
+                    var parsed = JSON.parse(text.trim());
+                    root.noteCount = Array.isArray(parsed) ? parsed.length : 0;
+                } catch (e) {
+                    root.noteCount = 0;
+                }
             }
         }
     }
 
     Component.onCompleted: {
-        checkNotesExist.running = true;
+        checkNoteCount.running = true;
     }
 }

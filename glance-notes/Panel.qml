@@ -15,27 +15,19 @@ Item {
     // SmartPanel properties
     readonly property var geometryPlaceholder: panelContainer
     readonly property bool allowAttach: true
-    property real contentPreferredWidth: 500 * Style.uiScaleRatio
-    property real contentPreferredHeight: 600 * Style.uiScaleRatio
+    property real contentPreferredWidth: 600 * Style.uiScaleRatio
+    property real contentPreferredHeight: 700 * Style.uiScaleRatio
 
-    readonly property string notesPath: (pluginApi?.pluginDir || (Settings.configDir + "/plugins/glance-notes")) + "/notes.txt"
-    property bool isSaving: false
-    property bool hasUnsavedChanges: false
-    property int wordCount: 0
-    property int charCount: 0
+    readonly property string notesPath: (pluginApi?.pluginDir || (Settings.configDir + "/plugins/glance-notes")) + "/notes.json"
+    property var notes: []
+    property int editingIndex: -1
+    property string editingText: ""
 
     anchors.fill: parent
 
     Component.onCompleted: {
         Logger.i("GlanceNotes", "Panel loaded!");
         loadNotes();
-        notesArea.forceActiveFocus();
-    }
-
-    function saveNotes() {
-        Logger.i("GlanceNotes", "Saving notes...");
-        isSaving = true;
-        saveProcess.running = true;
     }
 
     function loadNotes() {
@@ -43,15 +35,75 @@ Item {
         loadProcess.running = true;
     }
 
-    function clearNotes() {
-        notesArea.text = "";
+    function saveNotes() {
+        Logger.i("GlanceNotes", "Saving notes...");
+        var jsonData = JSON.stringify(root.notes, null, 2);
+        saveProcess.environment = { "NOTES_JSON": jsonData };
+        saveProcess.running = true;
+    }
+
+    function addNote() {
+        var now = new Date();
+        var newNote = {
+            "id": Date.now(),
+            "text": "",
+            "created": now.toISOString(),
+            "modified": now.toISOString()
+        };
+        root.notes.push(newNote);
+        root.notes = root.notes; // Trigger update
+        root.editingIndex = root.notes.length - 1;
+        root.editingText = "";
         saveNotes();
     }
 
-    function updateStats() {
-        var text = notesArea.text.trim();
-        root.charCount = notesArea.text.length;
-        root.wordCount = text.length > 0 ? text.split(/\s+/).length : 0;
+    function deleteNote(index) {
+        root.notes.splice(index, 1);
+        root.notes = root.notes; // Trigger update
+        root.editingIndex = -1;
+        saveNotes();
+    }
+
+    function startEdit(index) {
+        root.editingIndex = index;
+        root.editingText = root.notes[index].text;
+    }
+
+    function saveEdit() {
+        if (root.editingIndex >= 0 && root.editingIndex < root.notes.length) {
+            root.notes[root.editingIndex].text = root.editingText;
+            root.notes[root.editingIndex].modified = new Date().toISOString();
+            root.notes = root.notes; // Trigger update
+            root.editingIndex = -1;
+            saveNotes();
+        }
+    }
+
+    function cancelEdit() {
+        root.editingIndex = -1;
+        root.editingText = "";
+    }
+
+    function copyToClipboard(text) {
+        copyProcess.environment = { "COPY_TEXT": text };
+        copyProcess.running = true;
+        ToastService.show("Copied to clipboard!", ToastService.Type.Info);
+    }
+
+    function formatDate(isoString) {
+        var date = new Date(isoString);
+        var now = new Date();
+        var diffMs = now - date;
+        var diffMins = Math.floor(diffMs / 60000);
+        var diffHours = Math.floor(diffMs / 3600000);
+        var diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return "just now";
+        if (diffMins < 60) return diffMins + "m ago";
+        if (diffHours < 24) return diffHours + "h ago";
+        if (diffDays < 7) return diffDays + "d ago";
+        
+        return date.toLocaleDateString();
     }
 
     Rectangle {
@@ -78,7 +130,7 @@ Item {
                     spacing: Style.marginM
 
                     NIcon {
-                        icon: "draft-symbolic"
+                        icon: "note-multiple-symbolic"
                         color: Color.mPrimary
                     }
 
@@ -91,178 +143,234 @@ Item {
 
                     Item { Layout.fillWidth: true }
 
-                    // Save indicator
-                    RowLayout {
-                        visible: root.hasUnsavedChanges || root.isSaving
-                        spacing: Style.marginXS
-
-                        Rectangle {
-                            Layout.preferredWidth: 6
-                            Layout.preferredHeight: 6
-                            radius: 3
-                            color: root.isSaving ? Color.mPrimary : Color.mTertiary
-
-                            SequentialAnimation on opacity {
-                                running: root.isSaving
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 1; to: 0.3; duration: 500 }
-                                NumberAnimation { from: 0.3; to: 1; duration: 500 }
-                            }
-                        }
-
-                        NText {
-                            text: root.isSaving ? "Saving..." : "Unsaved"
-                            pointSize: Style.fontSizeXS
-                            color: root.isSaving ? Color.mPrimary : Color.mTertiary
-                        }
-                    }
-                }
-
-                // Stats bar
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Style.marginM
-
-                    Rectangle {
-                        Layout.preferredWidth: 3
-                        Layout.preferredHeight: 16
-                        radius: 1.5
-                        color: Color.mPrimary
-                    }
-
                     NText {
-                        text: root.wordCount + " words"
+                        text: root.notes.length + " " + (root.notes.length === 1 ? "note" : "notes")
                         pointSize: Style.fontSizeS
                         color: Color.mOnSurfaceVariant
                     }
 
-                    Rectangle {
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: 12
-                        color: Color.mOutlineVariant
+                    NButton {
+                        text: "New Note"
+                        icon: "add-symbolic"
+                        onClicked: root.addNote()
                     }
-
-                    NText {
-                        text: root.charCount + " characters"
-                        pointSize: Style.fontSizeS
-                        color: Color.mOnSurfaceVariant
-                    }
-
-                    Item { Layout.fillWidth: true }
                 }
 
-                // Text area
+                // Notes list or editor
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     color: Color.mSurfaceVariant
                     radius: Style.radiusM
-                    border.color: notesArea.activeFocus ? Color.mPrimary : Color.mOutlineVariant
-                    border.width: notesArea.activeFocus ? 2 : 1
                     clip: true
 
-                    Behavior on border.color {
-                        ColorAnimation { duration: 200 }
+                    // Editing mode
+                    Item {
+                        visible: root.editingIndex >= 0
+                        anchors.fill: parent
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: Style.marginM
+                            spacing: Style.marginM
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                NText {
+                                    text: "Editing Note"
+                                    pointSize: Style.fontSizeM
+                                    font.weight: Font.Bold
+                                    color: Color.mPrimary
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                NButton {
+                                    text: "Cancel"
+                                    onClicked: root.cancelEdit()
+                                }
+
+                                NButton {
+                                    text: "Save"
+                                    highlighted: true
+                                    onClicked: root.saveEdit()
+                                }
+                            }
+
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                contentWidth: availableWidth
+
+                                TextArea {
+                                    id: editArea
+                                    width: parent.width
+                                    text: root.editingText
+                                    wrapMode: TextEdit.Wrap
+                                    color: Color.mOnSurface
+                                    font.pointSize: Style.fontSizeM
+                                    placeholderText: "Type your note here..."
+                                    placeholderTextColor: Color.mOutline
+                                    background: Rectangle {
+                                        color: Color.mSurface
+                                        radius: Style.radiusS
+                                    }
+
+                                    onTextChanged: root.editingText = text
+
+                                    Keys.onPressed: function(event) {
+                                        if (event.modifiers & Qt.ControlModifier) {
+                                            if (event.key === Qt.Key_Return) {
+                                                root.saveEdit();
+                                                event.accepted = true;
+                                            }
+                                        }
+                                        if (event.key === Qt.Key_Escape) {
+                                            root.cancelEdit();
+                                            event.accepted = true;
+                                        }
+                                    }
+
+                                    Component.onCompleted: {
+                                        if (visible) forceActiveFocus();
+                                    }
+                                }
+                            }
+
+                            NText {
+                                text: "Ctrl+Enter to save • Esc to cancel"
+                                pointSize: Style.fontSizeXS
+                                color: Color.mOutlineVariant
+                            }
+                        }
                     }
 
-                    Behavior on border.width {
-                        NumberAnimation { duration: 200 }
-                    }
-
+                    // List mode
                     ScrollView {
-                        id: scrollView
+                        visible: root.editingIndex < 0
                         anchors.fill: parent
                         anchors.margins: Style.marginS
                         contentWidth: availableWidth
-                        clip: true
 
-                        TextArea {
-                            id: notesArea
-                            width: scrollView.availableWidth
-                            wrapMode: TextEdit.Wrap
-                            color: Color.mOnSurfaceVariant
-                            font.pointSize: Style.fontSizeM
-                            font.family: "monospace"
-                            selectedTextColor: Color.mOnPrimary
-                            selectionColor: Color.mPrimary
-                            placeholderText: "Start typing your notes here...\n\nTip: Your notes are automatically saved as you type."
-                            placeholderTextColor: Color.mOutline
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: Style.marginS
 
-                            background: Rectangle {
-                                color: "transparent"
+                            Repeater {
+                                model: root.notes
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: noteContent.implicitHeight + Style.marginM * 2
+                                    color: Color.mSurface
+                                    radius: Style.radiusM
+                                    border.color: Color.mOutlineVariant
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        id: noteContent
+                                        anchors.fill: parent
+                                        anchors.margins: Style.marginM
+                                        spacing: Style.marginS
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: Style.marginS
+
+                                            NText {
+                                                text: root.formatDate(modelData.modified)
+                                                pointSize: Style.fontSizeXS
+                                                color: Color.mOutlineVariant
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            NButton {
+                                                text: "Copy"
+                                                icon: "copy-symbolic"
+                                                onClicked: root.copyToClipboard(modelData.text)
+                                            }
+
+                                            NButton {
+                                                text: "Edit"
+                                                icon: "edit-symbolic"
+                                                onClicked: root.startEdit(index)
+                                            }
+
+                                            NButton {
+                                                text: "Delete"
+                                                icon: "delete-symbolic"
+                                                onClicked: root.deleteNote(index)
+                                            }
+                                        }
+
+                                        NText {
+                                            Layout.fillWidth: true
+                                            text: modelData.text || "<empty note>"
+                                            pointSize: Style.fontSizeM
+                                            color: modelData.text ? Color.mOnSurface : Color.mOutline
+                                            wrapMode: Text.Wrap
+                                            maximumLineCount: 10
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
                             }
 
-                            onTextChanged: {
-                                root.hasUnsavedChanges = true;
-                                root.updateStats();
-                                autoSaveTimer.restart();
-                            }
+                            // Empty state
+                            Item {
+                                visible: root.notes.length === 0
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.preferredHeight: 300
 
-                            Keys.onPressed: function(event) {
-                                if (event.modifiers & Qt.ControlModifier) {
-                                    if (event.key === Qt.Key_S) {
-                                        root.saveNotes();
-                                        event.accepted = true;
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Style.marginM
+
+                                    NIcon {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        icon: "note-multiple-symbolic"
+                                        color: Color.mOutlineVariant
+                                    }
+
+                                    NText {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: "No notes yet"
+                                        pointSize: Style.fontSizeL
+                                        color: Color.mOutlineVariant
+                                    }
+
+                                    NText {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: "Click 'New Note' to get started"
+                                        pointSize: Style.fontSizeS
+                                        color: Color.mOutlineVariant
                                     }
                                 }
                             }
                         }
                     }
                 }
-
-                // Action buttons
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Style.marginS
-
-                    NButton {
-                        text: "Clear All"
-                        onClicked: {
-                            if (notesArea.text.trim().length > 0) {
-                                root.clearNotes();
-                            }
-                        }
-                    }
-
-                    NButton {
-                        text: "Save Now"
-                        onClicked: {
-                            root.saveNotes();
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    NText {
-                        text: "Ctrl+S to save"
-                        pointSize: Style.fontSizeXS
-                        color: Color.mOutlineVariant
-                    }
-                }
             }
-        }
-    }
-
-    // Auto-save timer (1 second after last keystroke)
-    Timer {
-        id: autoSaveTimer
-        interval: 1000
-        repeat: false
-        onTriggered: {
-            root.saveNotes();
         }
     }
 
     // Load process
     Process {
         id: loadProcess
-        command: ["sh", "-c", "cat '" + root.notesPath + "' 2>/dev/null || echo ''"]
+        command: ["sh", "-c", "cat '" + root.notesPath + "' 2>/dev/null || echo '[]'"]
         stdout: StdioCollector {
             onStreamFinished: {
-                Logger.i("GlanceNotes", "Loaded " + text.length + " characters");
-                notesArea.text = text;
-                root.hasUnsavedChanges = false;
-                root.updateStats();
+                try {
+                    var parsed = JSON.parse(text);
+                    root.notes = Array.isArray(parsed) ? parsed : [];
+                    Logger.i("GlanceNotes", "Loaded " + root.notes.length + " notes");
+                } catch (e) {
+                    Logger.e("GlanceNotes", "Failed to parse JSON: " + e);
+                    root.notes = [];
+                }
             }
         }
     }
@@ -270,18 +378,21 @@ Item {
     // Save process
     Process {
         id: saveProcess
-        command: ["sh", "-c", "printf '%s' \"$NOTES_CONTENT\" > '" + root.notesPath + "'"]
-        environment: {
-            "NOTES_CONTENT": notesArea.text
-        }
+        command: ["sh", "-c", "printf '%s' \"$NOTES_JSON\" > '" + root.notesPath + "'"]
+        property var environment: ({})
         onExited: function(code, status) {
-            Logger.i("GlanceNotes", "Save exit code: " + code);
-            root.isSaving = false;
             if (code === 0) {
-                root.hasUnsavedChanges = false;
+                Logger.i("GlanceNotes", "Notes saved successfully");
             } else {
                 Logger.e("GlanceNotes", "Failed to save notes");
             }
         }
+    }
+
+    // Copy to clipboard process
+    Process {
+        id: copyProcess
+        command: ["sh", "-c", "printf '%s' \"$COPY_TEXT\" | wl-copy || printf '%s' \"$COPY_TEXT\" | xclip -selection clipboard"]
+        property var environment: ({})
     }
 }

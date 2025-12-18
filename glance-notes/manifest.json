@@ -1,12 +1,12 @@
 {
   "id": "glance-notes",
   "name": "GlanceNotes",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "minNoctaliaVersion": "3.6.0",
   "author": "pnby999",
   "license": "MIT",
   "repository": "https://github.com/pnby999/noctalia-plugins",
-  "description": "Quick notes with auto-save, word count, and keyboard shortcuts. Your personal sticky note in the bar.",
+  "description": "Manage multiple notes with timestamps, easy copy/edit, and a clean interface. Your personal note manager.",
   "entryPoints": {
     "barWidget": "BarWidget.qml",
     "panel": "Panel.qml"
