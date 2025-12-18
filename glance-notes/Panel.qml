@@ -26,12 +26,20 @@ Item {
 
     anchors.fill: parent
 
+    Component.onCompleted: {
+        Logger.i("GlanceNotes", "Panel loaded!");
+        loadNotes();
+        notesArea.forceActiveFocus();
+    }
+
     function saveNotes() {
+        Logger.i("GlanceNotes", "Saving notes...");
         isSaving = true;
         saveProcess.running = true;
     }
 
     function loadNotes() {
+        Logger.i("GlanceNotes", "Loading notes from: " + notesPath);
         loadProcess.running = true;
     }
 
@@ -49,7 +57,7 @@ Item {
     Rectangle {
         id: panelContainer
         anchors.fill: parent
-        color: "transparent"
+        color: Color.transparent
 
         Rectangle {
             anchors.fill: parent
@@ -58,7 +66,6 @@ Item {
             radius: Style.radiusL
             border.color: Color.mOutline
             border.width: Style.borderS
-            clip: true
 
             ColumnLayout {
                 anchors.fill: parent
@@ -151,21 +158,15 @@ Item {
                     color: Color.mSurfaceVariant
                     radius: Style.radiusM
                     border.color: notesArea.activeFocus ? Color.mPrimary : Color.mOutlineVariant
-                    border.width: notesArea.activeFocus ? 2 : Style.borderS
+                    border.width: notesArea.activeFocus ? 2 : 1
                     clip: true
 
                     Behavior on border.color {
-                        ColorAnimation {
-                            duration: Style.animationFast
-                            easing.type: Easing.InOutQuad
-                        }
+                        ColorAnimation { duration: 200 }
                     }
 
                     Behavior on border.width {
-                        NumberAnimation {
-                            duration: Style.animationFast
-                            easing.type: Easing.InOutQuad
-                        }
+                        NumberAnimation { duration: 200 }
                     }
 
                     ScrollView {
@@ -174,22 +175,6 @@ Item {
                         anchors.margins: Style.marginS
                         contentWidth: availableWidth
                         clip: true
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                            width: 8
-                            
-                            contentItem: Rectangle {
-                                implicitWidth: 8
-                                radius: 4
-                                color: Color.mOutlineVariant
-                                opacity: scrollView.ScrollBar.vertical.active ? 1 : 0.5
-                                
-                                Behavior on opacity {
-                                    NumberAnimation { duration: 200 }
-                                }
-                            }
-                        }
 
                         TextArea {
                             id: notesArea
@@ -203,7 +188,9 @@ Item {
                             placeholderText: "Start typing your notes here...\n\nTip: Your notes are automatically saved as you type."
                             placeholderTextColor: Color.mOutline
 
-                            background: null
+                            background: Rectangle {
+                                color: "transparent"
+                            }
 
                             onTextChanged: {
                                 root.hasUnsavedChanges = true;
@@ -230,20 +217,15 @@ Item {
 
                     NButton {
                         text: "Clear All"
-                        icon: "delete-symbolic"
                         onClicked: {
                             if (notesArea.text.trim().length > 0) {
-                                // Simple confirmation - just clear
                                 root.clearNotes();
-                                ToastService.show("Notes cleared", ToastService.Type.Info);
                             }
                         }
                     }
 
                     NButton {
                         text: "Save Now"
-                        icon: "save-symbolic"
-                        highlighted: root.hasUnsavedChanges
                         onClicked: {
                             root.saveNotes();
                         }
@@ -277,6 +259,7 @@ Item {
         command: ["sh", "-c", "cat '" + root.notesPath + "' 2>/dev/null || echo ''"]
         stdout: StdioCollector {
             onStreamFinished: {
+                Logger.i("GlanceNotes", "Loaded " + text.length + " characters");
                 notesArea.text = text;
                 root.hasUnsavedChanges = false;
                 root.updateStats();
@@ -292,18 +275,13 @@ Item {
             "NOTES_CONTENT": notesArea.text
         }
         onExited: function(code, status) {
+            Logger.i("GlanceNotes", "Save exit code: " + code);
             root.isSaving = false;
             if (code === 0) {
                 root.hasUnsavedChanges = false;
             } else {
                 Logger.e("GlanceNotes", "Failed to save notes");
-                ToastService.show("Failed to save notes", ToastService.Type.Error);
             }
         }
-    }
-
-    Component.onCompleted: {
-        root.loadNotes();
-        notesArea.forceActiveFocus();
     }
 }
